@@ -350,7 +350,26 @@ function typeRefToIR(
         const qn = node.typeName as ts.QualifiedName;
         qualifiedName = `${qn.left.getText()}_${name}`;
     } else {
-        qualifiedName = name;
+        // bare identifier — check if the resolved symbol belongs to a namespace,
+        // so references to e.g. `Builder` from within `namespace Packet { ... }`
+        // resolve to the same qualified name as `Packet.Builder` and dedupe correctly
+        const sym = checker.getSymbolAtLocation(node.typeName);
+        const resolved =
+            sym && sym.flags & t.SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym;
+        const parent = (resolved as unknown as { parent?: ts.Symbol })?.parent;
+        const parentName = parent?.getName();
+        if (
+            parentName &&
+            parentName !== "__global" &&
+            parentName !== "unknown" &&
+            !parentName.includes("/") &&
+            !parentName.includes("\\") &&
+            !parentName.includes(".")
+        ) {
+            qualifiedName = `${parentName}_${name}`;
+        } else {
+            qualifiedName = name;
+        }
     }
 
     // try to extract user-defined type
