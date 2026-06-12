@@ -196,6 +196,23 @@ Watch mode (`rbxtsc -w`) is fully supported. Files are re-annotated automaticall
 
 ---
 
+## Benchmarks
+
+Measured on identical code, with and without the transformer (`--!native` requires static types to compile to native machine code; without this transformer the directive has little effect since roblox-ts strips all annotations).
+
+| Function | Without (`no-native`) | With (`native+typed`) | Speedup |
+|---|---|---|---|
+| `lerp` | 2.2769ms | 2.3189ms | ~1.0x |
+| `pack` | 2.2749ms | 2.2695ms | ~1.0x |
+| `sumArray(100)` | 2.8516ms | 2.3736ms | ~1.2x |
+| `mapLookup` | 4.3818ms | 2.3151ms | ~1.9x |
+| `encodeVarUint` | 37.6953ms | 14.6217ms | ~2.6x |
+| `decodeVarUint` | 51.1922ms | 19.1153ms | ~2.7x |
+
+Gains scale with how arithmetic/branch-heavy the function is — simple functions like `lerp` and `pack` see negligible difference, while codec-style functions with tight loops and bit manipulation (`encodeVarUint`, `decodeVarUint`) see the largest wins from native codegen.
+
+---
+
 ## Requirements
 
 - roblox-ts `>=3.0.0`

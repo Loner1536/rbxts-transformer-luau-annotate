@@ -1,6 +1,6 @@
 {
     "name": "rbxts-transformer-luau-annotate",
-    "version": "0.0.1",
+    "version": "0.0.2-beta.0",
     "description": "Automatically adds Luau type annotations to --!native roblox-ts output for native codegen optimization",
     "main": "out/transformer.js",
     "scripts": {
