@@ -1,0 +1,73 @@
+{
+	"name": "rbxts-packages-playground",
+	"emitLegacyScripts": false,
+	"globIgnorePaths": [
+		"**/jest.config.luau/**",
+		"**/tsconfig.json/**",
+		"**/.gitkeep/**",
+		"**/tests/**"
+	],
+	"tree": {
+		"$className": "DataModel",
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"$properties": {
+				"LoadStringEnabled": true
+			},
+			"TS": {
+				"$path": "out/src/server"
+			}
+		},
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"TS": {
+				"$path": "out/src/client"
+			},
+			"TSShared": {
+				"$path": "out/src/shared"
+			},
+			"GetReceived": {
+				"$className": "RemoteFunction"
+			},
+			"rbxts_include": {
+				"$path": "out/include",
+				"node_modules": {
+					"$className": "Folder",
+					"@rbxts": {
+						"$path": "node_modules/@rbxts"
+					},
+					"@rbxts-js": {
+						"$path": "../node_modules/@rbxts-js"
+					},
+					"@flamework": {
+						"$path": "node_modules/@flamework"
+					}
+				}
+			}
+		},
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"stories": {
+				"$path": "out/src/stories"
+			}
+		},
+		"Workspace": {
+			"$className": "Workspace",
+			"$properties": {
+				"FilteringEnabled": true
+			}
+		},
+		"HttpService": {
+			"$className": "HttpService",
+			"$properties": {
+				"HttpEnabled": true
+			}
+		},
+		"SoundService": {
+			"$className": "SoundService",
+			"$properties": {
+				"RespectFilteringEnabled": true
+			}
+		}
+	}
+}

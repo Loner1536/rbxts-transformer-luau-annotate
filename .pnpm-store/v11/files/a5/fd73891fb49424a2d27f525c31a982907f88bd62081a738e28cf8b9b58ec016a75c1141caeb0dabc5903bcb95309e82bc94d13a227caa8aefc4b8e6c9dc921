@@ -1,0 +1,18 @@
+{
+  "name": "@rbxts-js/collections",
+  "version": "1.2.3-ts.1",
+  "repository": "rbxts-js/luau-polyfill",
+  "license": "MIT",
+  "main": "src/init.lua",
+  "types": "src/index.d.ts",
+  "files": [
+    "src",
+    "default.project.json",
+    "!.robloxrc",
+    "!**/__tests__"
+  ],
+  "dependencies": {
+    "@rbxts-js/instance-of": "^1.2.3-ts.1",
+    "@rbxts-js/es7-types": "^1.2.3-ts.1"
+  }
+}

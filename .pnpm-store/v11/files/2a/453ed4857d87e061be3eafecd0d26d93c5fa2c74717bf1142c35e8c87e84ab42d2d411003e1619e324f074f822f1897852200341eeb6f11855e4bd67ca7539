@@ -1,0 +1,17 @@
+{
+  "name": "@rbxts-js/timers",
+  "version": "1.2.3-ts.1",
+  "repository": "rbxts-js/luau-polyfill",
+  "license": "MIT",
+  "main": "src/init.lua",
+  "types": "src/index.d.ts",
+  "files": [
+    "src",
+    "default.project.json",
+    "!.robloxrc",
+    "!**/__tests__"
+  ],
+  "dependencies": {
+    "@rbxts-js/collections": "^1.2.3-ts.1"
+  }
+}

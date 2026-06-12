@@ -1,0 +1,37 @@
+{
+	"name": "@rbxts-js/roblox-lua-promise",
+	"version": "3.5.0-ts.2",
+	"description": "An implementation of `Promise` similar to Promise/A+.",
+	"main": "lib/init.lua",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib",
+		"default.project.json",
+		"!*.spec.lua",
+		"!*.md"
+	],
+	"directories": {
+		"lib": "lib"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"gh-pages": "^2.1.1",
+		"vuepress": "^1.7.1",
+		"vuepress-plugin-api-docs-generator": "^1.0.19"
+	},
+	"scripts": {
+		"docs:dev": "vuepress dev .",
+		"docs:build": "vuepress build .",
+		"docs:publish": "gh-pages -d ./.vuepress/dist"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/evaera/roblox-lua-promise.git"
+	},
+	"author": "",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/evaera/roblox-lua-promise/issues"
+	},
+	"homepage": "https://github.com/evaera/roblox-lua-promise#readme"
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@rbxts-js/luau-polyfill",
+  "version": "1.2.3-ts.1",
+  "repository": "rbxts-js/luau-polyfill",
+  "license": "MIT",
+  "main": "src/init.lua",
+  "types": "src/index.d.ts",
+  "files": [
+    "src",
+    "default.project.json",
+    "!.robloxrc",
+    "!**/__tests__"
+  ],
+  "dependencies": {
+    "@rbxts-js/symbol-luau": "^1.0.0-ts.1",
+    "@rbxts-js/collections": "^1.2.3-ts.1",
+    "@rbxts-js/boolean": "^1.2.3-ts.1",
+    "@rbxts-js/number": "^1.2.3-ts.1",
+    "@rbxts-js/console": "^1.2.3-ts.1",
+    "@rbxts-js/instance-of": "^1.2.3-ts.1",
+    "@rbxts-js/math": "^1.2.3-ts.1",
+    "@rbxts-js/es7-types": "^1.2.3-ts.1",
+    "@rbxts-js/string": "^1.2.3-ts.1",
+    "@rbxts-js/timers": "^1.2.3-ts.1"
+  }
+}

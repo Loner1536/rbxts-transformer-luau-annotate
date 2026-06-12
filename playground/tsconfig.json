@@ -1,0 +1,45 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "commonjs",
+		"moduleResolution": "Node",
+		"moduleDetection": "force",
+		"strict": true,
+		"noLib": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"forceConsistentCasingInFileNames": true,
+		"downlevelIteration": true,
+		"resolveJsonModule": true,
+		"incremental": true,
+		"tsBuildInfoFile": "out/tsconfig.tsbuildinfo",
+		"jsx": "react",
+		"jsxFactory": "React.createElement",
+		"jsxFragmentFactory": "React.Fragment",
+		"rootDir": "./src",
+		"baseUrl": ".",
+		"outDir": "./out/src",
+		"experimentalDecorators": true,
+		"typeRoots": ["./node_modules/@rbxts", "./node_modules/@flamework"],
+		"plugins": [
+			{
+				"transform": "rbxts-transformer-luau-annotate",
+				"verbose": true
+			},
+			{
+				"transform": "rbxts-transform-env"
+			},
+			{
+				"transform": "rbxts-transformer-flamework",
+				"obfuscation": false
+			}
+		],
+		"paths": {
+			"@interface/*": ["./src/client/interface/*"],
+			"@shared/*": ["./src/shared/*"],
+			"@client/*": ["./src/client/*"],
+			"@server/*": ["./src/server/*"]
+		}
+	},
+	"include": ["./src"]
+}

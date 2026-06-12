@@ -1,0 +1,14 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"tasks": {
+		"compile": {
+			"outputs": ["out/**/*"]
+		},
+		"copy-to-test": {
+			"dependsOn": ["compile"],
+			"persistent": true,
+			"cache": false,
+			"outputs": ["test/out/package/**/*"]
+		}
+	}
+}

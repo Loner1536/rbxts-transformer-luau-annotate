@@ -1,0 +1,28 @@
+{
+	"version": 1,
+	"flameworkVersion": "1.3.2",
+	"identifiers": {
+		"@flamework/components:out/baseComponent@BaseComponent": "$c:baseComponent@BaseComponent",
+		"@flamework/components:out/componentTracker@ComponentTracker": "$c:componentTracker@ComponentTracker",
+		"@flamework/components:out/components@Components": "$c:components@Components",
+		"@flamework/components:out/components@Component": "$c:components@Component"
+	},
+	"metadata": {},
+	"identifierPrefix": "$c",
+	"classes": [
+		{
+			"filePath": "out/components.lua",
+			"internalId": "$c:components@Components",
+			"decorators": [
+				{
+					"internalId": "$:flamework@Service",
+					"name": "Service"
+				},
+				{
+					"internalId": "$:flamework@Controller",
+					"name": "Controller"
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@rbxts/charm",
+  "version": "0.10.0",
+  "description": "An atomic state management library for Roblox",
+  "repository": "littensy/charm",
+  "license": "MIT",
+  "main": "init.luau",
+  "types": "index.d.ts",
+  "scripts": {
+    "publish:wally": "wally publish"
+  }
+}

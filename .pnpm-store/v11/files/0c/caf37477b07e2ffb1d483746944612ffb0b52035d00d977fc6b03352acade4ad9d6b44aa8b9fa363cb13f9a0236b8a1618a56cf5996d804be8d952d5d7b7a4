@@ -1,0 +1,20 @@
+{
+  "name": "@rbxts-js/react-globals",
+  "version": "17.3.7-ts.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbxts-js/react-lua.git"
+  },
+  "license": "MIT",
+  "main": "src/init.lua",
+  "types": "src/index.d.ts",
+  "files": [
+    "src",
+    "default.project.json",
+    "!.robloxrc",
+    "!**/__tests__"
+  ],
+  "dependencies": {
+    "@rbxts-js/safe-flags": "^17.3.7-ts.1"
+  }
+}

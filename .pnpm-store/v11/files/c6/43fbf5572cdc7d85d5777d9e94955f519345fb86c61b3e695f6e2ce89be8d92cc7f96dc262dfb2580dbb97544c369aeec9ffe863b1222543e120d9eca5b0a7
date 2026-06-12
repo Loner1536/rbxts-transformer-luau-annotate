@@ -1,0 +1,10 @@
+import { Modding } from "@flamework/core";
+export type Constructor<T = object> = new (...args: never[]) => T;
+export type AbstractConstructor<T = object> = abstract new (...args: never[]) => T;
+export type ConstructorRef<T> = Constructor<T> | Modding.Generic<T, "id"> | string;
+export type AbstractConstructorRef<T> = AbstractConstructor<T> | Modding.Generic<T, "id"> | string;
+export declare function isConstructor(obj: object): obj is Constructor;
+export declare function getParentConstructor(ctor: AbstractConstructor): AbstractConstructor<object> | undefined;
+export declare function safeCall(message: unknown[], func: () => void, printStack?: boolean): void;
+export declare function getComponentFromSpecifier<T extends AbstractConstructorRef<unknown>>(componentSpecifier?: T): Extract<T, AbstractConstructor<object>>;
+export declare function getIdFromSpecifier<T extends AbstractConstructor>(componentSpecifier?: T | string): string | undefined;

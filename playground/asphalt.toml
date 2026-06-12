@@ -1,0 +1,13 @@
+[creator]
+type = "user"
+id = 123456
+
+[codegen]
+output_name = "Assets"
+
+strip_extension = true
+typescript = true
+
+[inputs.assets]
+path = "assets/asphalt"
+output_path = "src/shared"

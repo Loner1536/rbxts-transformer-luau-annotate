@@ -1,0 +1,50 @@
+/// <reference types="@rbxts/compiler-types" />
+/// <reference types="@rbxts/compiler-types" />
+export interface DebounceOptions {
+    /**
+     * The leading edge of the timeout.
+     */
+    leading?: boolean;
+    /**
+     * The trailing edge of the timeout.
+     */
+    trailing?: boolean;
+    /**
+     * The maximum time `callback` is allowed to be delayed before it's invoked.
+     */
+    maxWait?: number;
+}
+export type Debounced<T extends Callback> = T & {
+    cancel: () => void;
+    flush: () => ReturnType<T>;
+    pending: () => boolean;
+};
+/**
+ * Creates a debounced function that delays invoking `callback` until after `wait`
+ * seconds have elapsed since the last time the debounced function was invoked.
+ * The debounced function comes with a `cancel` method to cancel delayed
+ * `callback` invocations and a `flush` method to immediately invoke them.
+ *
+ * Provide `options` to indicate whether `callback` should be invoked on the
+ * leading and/or trailing edge of the `wait` timeout. The `callback` is invoked
+ * with the last arguments provided to the debounced function. Subsequent calls
+ * to the debounced function return the result of the last `callback` invocation.
+ *
+ * **Note:** If `leading` and `trailing` options are `true`, `callback` is
+ * invoked on the trailing edge of the timeout only if the debounced function
+ * is invoked more than once during the `wait` timeout.
+ *
+ * If `wait` is `0` and `leading` is `false`, `callback` invocation is deferred
+ * until the next tick, similar to `setTimeout` with a timeout of `0`.
+ *
+ * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
+ * for details over the differences between `debounce` and `throttle`.
+ *
+ * @param callback The function to debounce.
+ * @param wait The number of seconds to delay. Defaults to `0`.
+ * @param options The options object.
+ * @returns The new debounced function.
+ * @see https://github.com/lodash/lodash/blob/master/debounce.js/
+ * @see https://css-tricks.com/debouncing-throttling-explained-examples/
+ */
+export declare function debounce<T extends Callback>(callback: T, wait?: number, options?: DebounceOptions): Debounced<T>;

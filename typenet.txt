@@ -1,0 +1,732 @@
+# src:./package/src n:4
+
+## package/src/binary/pool.ts (383 lines)
+```ts
+// Packages
+import { Players, ReplicatedStorage, RunService } from "@rbxts/services";
+
+// Internal
+import type { API, Binary, Codec, Def, Pool } from "@types";
+
+const IS_SERVER = RunService.IsServer();
+
+const enum Dir {
+    Request = 0,
+    Response = 1,
+}
+
+// ---------------------------------------------------------------- def builders
+// These produce inert data. Nothing touches the DataModel until createPool().
+
+export function packet<T>(
+    codec: Codec.Internal<T>,
+    opts?: { unreliable?: boolean },
+): Def.Packet<T> {
+    return { _kind: "Packet", codec, unreliable: opts?.unreliable === true };
+}
+
+export function query<Req, Res>(
+    req: Codec.Internal<Req>,
+    res: Codec.Internal<Res>,
+    opts?: { timeout?: number },
+): Def.Query<Req, Res> {
+    return { _kind: "Query", req, res, timeout: opts?.timeout ?? 10 };
+}
+
+export function replication<T>(codec: Codec.Internal<T>): Def.Replication<T> {
+    return { _kind: "Replication", codec };
+}
+
+// ---------------------------------------------------------------- binary plumbing
+
+function createWriter(): Binary.Writer {
+    return { buf: buffer.create(128), cursor: 0, refs: [] };
+}
+
+function createReader(buf: buffer, refs: defined[]): Binary.Reader {
+    return { buf, cursor: 0, refs, refCursor: 0 };
+}
+
+function ensure(w: Binary.Writer, bytes: number) {
+    const needed = w.cursor + bytes;
+    let size = buffer.len(w.buf);
+    if (needed <= size) return;
+    while (size < needed) size *= 2;
+    const grown = buffer.create(size);
+    buffer.copy(grown, 0, w.buf, 0, w.cursor);
+    w.buf = grown;
+}
+
+function writeU8(w: Binary.Writer, v: number) {
+    ensure(w, 1);
+    buffer.writeu8(w.buf, w.cursor, v);
+    w.cursor += 1;
+}
+
+function writeU16(w: Binary.Writer, v: number) {
+    ensure(w, 2);
+    buffer.writeu16(w.buf, w.cursor, v);
+    w.cursor += 2;
+}
+
+function writeU32(w: Binary.Writer, v: number) {
+    ensure(w, 4);
+    buffer.writeu32(w.buf, w.cursor, v);
+    w.cursor += 4;
+}
+
+function readU8(r: Binary.Reader) {
+    const v = buffer.readu8(r.buf, r.cursor);
+    r.cursor += 1;
+    return v;
+}
+
+function readU16(r: Binary.Reader) {
+    const v = buffer.readu16(r.buf, r.cursor);
+    r.cursor += 2;
+    return v;
+}
+
+function readU32(r: Binary.Reader) {
+    const v = buffer.readu32(r.buf, r.cursor);
+    r.cursor += 4;
+    return v;
+}
+
+/** exact-size copy of the written region, so we never fire padded buffers */
+function snapshot(w: Binary.Writer): buffer {
+    const out = buffer.create(w.cursor);
+    buffer.copy(out, 0, w.buf, 0, w.cursor);
+    return out;
+}
+
+function reset(w: Binary.Writer) {
+    w.cursor = 0;
+    w.refs = [];
+}
+
+// ---------------------------------------------------------------- remotes
+
+function getRemote(name: string, cls: "RemoteEvent" | "UnreliableRemoteEvent"): RemoteEvent {
+    if (IS_SERVER) {
+        const existing = ReplicatedStorage.FindFirstChild(name);
+        if (existing) return existing as RemoteEvent;
+        const remote = new Instance(cls);
+        remote.Name = name;
+        remote.Parent = ReplicatedStorage;
+        return remote as RemoteEvent;
+    }
+    return ReplicatedStorage.WaitForChild(name) as RemoteEvent;
+}
+
+// ---------------------------------------------------------------- pool
+
+export function createPool<D extends Pool.Defs>(poolName: string, defs: D): Pool.Of<D> {
+    const reliableRemote = getRemote(`TypeNet_${poolName}_R`, "RemoteEvent");
+    const unreliableRemote = getRemote(`TypeNet_${poolName}_U`, "UnreliableRemoteEvent");
+
+    // ---- deterministic IDs --------------------------------------------------
+    // Sorted alphabetically so server and client derive identical IDs from the
+    // same definition table. No handshake, no ID exchange, nothing to time out.
+    const sortedNames = new Array<string>();
+    for (const [k] of pairs(defs)) sortedNames.push(k as string);
+    sortedNames.sort();
+
+    // ---- outbound queues, flushed once per Heartbeat ------------------------
+    const serverQueues = new Map<Player, { r: Binary.Writer; u: Binary.Writer }>();
+    let clientReliable: Binary.Writer | undefined;
+    let clientUnreliable: Binary.Writer | undefined;
+
+    function queueFor(player: Player, unreliable: boolean): Binary.Writer {
+        let q = serverQueues.get(player);
+        if (!q) {
+            q = { r: createWriter(), u: createWriter() };
+            serverQueues.set(player, q);
+        }
+        return unreliable ? q.u : q.r;
+    }
+
+    function clientQueue(unreliable: boolean): Binary.Writer {
+        if (unreliable) {
+            if (!clientUnreliable) clientUnreliable = createWriter();
+            return clientUnreliable;
+        }
+        if (!clientReliable) clientReliable = createWriter();
+        return clientReliable;
+    }
+
+    function resolveTargets(target?: API.Target): Player[] {
+        if (target === undefined) return Players.GetPlayers();
+        if (typeIs(target, "Instance")) return [target as Player];
+        const maybeExclude = target as { exclude?: Player | Player[] };
+        if (maybeExclude.exclude !== undefined) {
+            const excluded = typeIs(maybeExclude.exclude, "Instance")
+                ? [maybeExclude.exclude as Player]
+                : (maybeExclude.exclude as Player[]);
+
+            return Players.GetPlayers().filter((p) => !excluded.includes(p));
+        }
+        return target as Player[];
+    }
+
+    // ---- inbound routing -----------------------------------------------------
+    // Every route MUST consume its full body even when there are no listeners,
+    // otherwise the stream desyncs for every message after it in the frame.
+    const routes = new Map<number, (r: Binary.Reader, player?: Player) => void>();
+
+    function dispatch(buf: buffer, refs: defined[], player?: Player) {
+        const r = createReader(buf, refs);
+        const total = buffer.len(buf);
+        const [ok] = pcall(() => {
+            while (r.cursor < total) {
+                const id = readU16(r);
+                const route = routes.get(id);
+                if (!route) error(`unknown channel id ${id}`);
+                route(r, player);
+            }
+        });
+        // A malformed frame can't be resynced (no per-message length prefix),
+        // so drop the remainder. Only clients can produce malformed frames.
+        if (!ok && player !== undefined) {
+            warn(`[TypeNet:${poolName}] dropped malformed frame from ${player.Name}`);
+        }
+    }
+
+    // ---- per-definition wiring -------------------------------------------------
+    const apis: Record<string, unknown> = {};
+    const replicationValues = new Map<number, unknown>();
+    let nonceCounter = 0;
+
+    sortedNames.forEach((defName, id) => {
+        const def = defs[defName] as Def.Any;
+
+        if (def._kind === "Packet") {
+            const listeners = new Set<(data: unknown, player?: Player) => void>();
+
+            routes.set(id, (r, player) => {
+                const data = def.codec.read(r); // always read — keeps stream aligned
+                for (const fn of listeners) task.spawn(fn, data, player);
+            });
+
+            const api: API.Packet<unknown> = {
+                send(data, target) {
+                    if (IS_SERVER) {
+                        for (const p of resolveTargets(target)) {
+                            const w = queueFor(p, def.unreliable);
+                            writeU16(w, id);
+                            def.codec.write(w, data);
+                        }
+                    } else {
+                        const w = clientQueue(def.unreliable);
+                        writeU16(w, id);
+                        def.codec.write(w, data);
+                    }
+                },
+                broadcast(data) {
+                    return api.send(data, undefined);
+                },
+                on(handler) {
+                    listeners.add(handler);
+                    return () => listeners.delete(handler);
+                },
+            };
+            apis[defName] = api;
+        } else if (def._kind === "Query") {
+            let serverHandler: ((player: Player, req: unknown) => unknown) | undefined;
+            const pending = new Map<
+                number,
+                { resolve: (v: unknown) => void; reject: (e: string) => void }
+            >();
+
+            routes.set(id, (r, player) => {
+                const dir = readU8(r);
+                const nonce = readU32(r);
+
+                if (dir === Dir.Request) {
+                    const req = def.req.read(r);
+                    if (!IS_SERVER || player === undefined) return; // server→client queries not supported (v1)
+                    task.spawn(() => {
+                        // Run the handler BEFORE writing anything, so a throwing
+                        // handler can't leave a half-written message in the queue.
+                        const [ok, result] = pcall(() => serverHandler!(player, req));
+                        const w = queueFor(player, false);
+                        writeU16(w, id);
+                        writeU8(w, Dir.Response);
+                        writeU32(w, nonce);
+                        writeU8(w, ok ? 1 : 0);
+                        if (ok) def.res.write(w, result);
+                    });
+                } else {
+                    const ok = readU8(r) === 1;
+                    const res = ok ? def.res.read(r) : undefined; // read even if already timed out
+                    const p = pending.get(nonce);
+                    if (p) {
+                        pending.delete(nonce);
+                        if (ok) p.resolve(res);
+                        else p.reject(`[TypeNet:${poolName}] query "${defName}" errored on server`);
+                    }
+                }
+            });
+
+            const api: API.Query<unknown, unknown> = {
+                invoke(req) {
+                    assert(!IS_SERVER, `[TypeNet] Query.invoke("${defName}") is client-only`);
+                    return new Promise<unknown>((resolve, reject) => {
+                        nonceCounter += 1;
+                        const nonce = nonceCounter;
+                        pending.set(nonce, { resolve, reject });
+
+                        const w = clientQueue(false);
+                        writeU16(w, id);
+                        writeU8(w, Dir.Request);
+                        writeU32(w, nonce);
+                        def.req.write(w, req);
+
+                        task.delay(def.timeout, () => {
+                            const p = pending.get(nonce);
+                            if (p) {
+                                pending.delete(nonce);
+                                p.reject(
+                                    `[TypeNet:${poolName}] query "${defName}" timed out (${def.timeout}s)`,
+                                );
+                            }
+                        });
+                    });
+                },
+                handle(handler) {
+                    serverHandler = handler as (player: Player, req: unknown) => unknown;
+                },
+            };
+            apis[defName] = api;
+        } else {
+            const changedListeners = new Set<(v: unknown) => void>();
+
+            routes.set(id, (r) => {
+                const value = def.codec.read(r);
+                replicationValues.set(id, value);
+                for (const fn of changedListeners) task.spawn(fn, value);
+            });
+
+            const api: API.Replication<unknown> = {
+                set(value) {
+                    assert(IS_SERVER, `[TypeNet] Replication.set("${defName}") is server-only`);
+                    replicationValues.set(id, value);
+                    for (const p of Players.GetPlayers()) {
+                        const w = queueFor(p, false);
+                        writeU16(w, id);
+                        def.codec.write(w, value);
+                    }
+                },
+                get() {
+                    return replicationValues.get(id);
+                },
+                changed(handler) {
+                    changedListeners.add(handler);
+                    return () => changedListeners.delete(handler);
+                },
+            };
+            apis[defName] = api;
+        }
+    });
+
+    // ---- lifecycle -----------------------------------------------------------
+    if (IS_SERVER) {
+        reliableRemote.OnServerEvent.Connect((player, buf, refs) =>
+            dispatch(buf as buffer, (refs as defined[] | undefined) ?? [], player),
+        );
+        unreliableRemote.OnServerEvent.Connect((player, buf, refs) =>
+            dispatch(buf as buffer, (refs as defined[] | undefined) ?? [], player),
+        );
+
+        // late joiners get a snapshot of every replication channel
+        Players.PlayerAdded.Connect((player) => {
+            for (const [id, value] of replicationValues) {
+                const def = defs[sortedNames[id]] as Def.Any;
+                if (def._kind !== "Replication") continue;
+                const w = queueFor(player, false);
+                writeU16(w, id);
+                def.codec.write(w, value);
+            }
+        });
+
+        Players.PlayerRemoving.Connect((player) => serverQueues.delete(player));
+    } else {
+        reliableRemote.OnClientEvent.Connect((buf: buffer, refs?: defined[]) =>
+            dispatch(buf, refs ?? []),
+        );
+        unreliableRemote.OnClientEvent.Connect((buf: buffer, refs?: defined[]) =>
+            dispatch(buf, refs ?? []),
+        );
+    }
+
+    RunService.Heartbeat.Connect(() => {
+        if (IS_SERVER) {
+            for (const [player, q] of serverQueues) {
+                if (q.r.cursor > 0) {
+                    reliableRemote.FireClient(player, snapshot(q.r), q.r.refs);
+                    reset(q.r);
+                }
+                if (q.u.cursor > 0) {
+                    unreliableRemote.FireClient(player, snapshot(q.u), q.u.refs);
+                    reset(q.u);
+                }
+            }
+        } else {
+            if (clientReliable && clientReliable.cursor > 0) {
+                reliableRemote.FireServer(snapshot(clientReliable), clientReliable.refs);
+                reset(clientReliable);
+            }
+            if (clientUnreliable && clientUnreliable.cursor > 0) {
+                unreliableRemote.FireServer(snapshot(clientUnreliable), clientUnreliable.refs);
+                reset(clientUnreliable);
+            }
+        }
+    });
+
+    return apis as Pool.Of<D>;
+}
+```
+
+## package/src/codec/index.ts (216 lines)
+```ts
+// Internal
+import type { Binary, Codec } from "@types";
+
+// ---------------------------------------------------------------- writer growth
+
+function ensure(w: Binary.Writer, bytes: number) {
+    const needed = w.cursor + bytes;
+    let size = buffer.len(w.buf);
+    if (needed <= size) return;
+    while (size < needed) size *= 2;
+    const grown = buffer.create(size);
+    buffer.copy(grown, 0, w.buf, 0, w.cursor);
+    w.buf = grown;
+}
+
+// ---------------------------------------------------------------- primitives
+
+export const u8: Codec.Internal<number> = {
+    write(w, v) {
+        ensure(w, 1);
+        buffer.writeu8(w.buf, w.cursor, v);
+        w.cursor += 1;
+    },
+    read(r) {
+        const v = buffer.readu8(r.buf, r.cursor);
+        r.cursor += 1;
+        return v;
+    },
+    _size: 1,
+};
+
+export const u16: Codec.Internal<number> = {
+    write(w, v) {
+        ensure(w, 2);
+        buffer.writeu16(w.buf, w.cursor, v);
+        w.cursor += 2;
+    },
+    read(r) {
+        const v = buffer.readu16(r.buf, r.cursor);
+        r.cursor += 2;
+        return v;
+    },
+    _size: 2,
+};
+
+export const u32: Codec.Internal<number> = {
+    write(w, v) {
+        ensure(w, 4);
+        buffer.writeu32(w.buf, w.cursor, v);
+        w.cursor += 4;
+    },
+    read(r) {
+        const v = buffer.readu32(r.buf, r.cursor);
+        r.cursor += 4;
+        return v;
+    },
+    _size: 4,
+};
+
+export const i32: Codec.Internal<number> = {
+    write(w, v) {
+        ensure(w, 4);
+        buffer.writei32(w.buf, w.cursor, v);
+        w.cursor += 4;
+    },
+    read(r) {
+        const v = buffer.readi32(r.buf, r.cursor);
+        r.cursor += 4;
+        return v;
+    },
+    _size: 4,
+};
+
+export const f32: Codec.Internal<number> = {
+    write(w, v) {
+        ensure(w, 4);
+        buffer.writef32(w.buf, w.cursor, v);
+        w.cursor += 4;
+    },
+    read(r) {
+        const v = buffer.readf32(r.buf, r.cursor);
+        r.cursor += 4;
+        return v;
+    },
+    _size: 4,
+};
+
+export const f64: Codec.Internal<number> = {
+    write(w, v) {
+        ensure(w, 8);
+        buffer.writef64(w.buf, w.cursor, v);
+        w.cursor += 8;
+    },
+    read(r) {
+        const v = buffer.readf64(r.buf, r.cursor);
+        r.cursor += 8;
+        return v;
+    },
+    _size: 8,
+};
+
+export const bool: Codec.Internal<boolean> = {
+    write(w, v) {
+        ensure(w, 1);
+        buffer.writeu8(w.buf, w.cursor, v ? 1 : 0);
+        w.cursor += 1;
+    },
+    read(r) {
+        const v = buffer.readu8(r.buf, r.cursor) === 1;
+        r.cursor += 1;
+        return v;
+    },
+    _size: 1,
+};
+
+/** u16 length-prefixed string (max 65535 bytes) */
+export const str: Codec.Internal<string> = {
+    write(w, v) {
+        const len = v.size();
+        u16.write(w, len);
+        ensure(w, len);
+        buffer.writestring(w.buf, w.cursor, v);
+        w.cursor += len;
+    },
+    read(r) {
+        const len = u16.read(r);
+        const v = buffer.readstring(r.buf, r.cursor, len);
+        r.cursor += len;
+        return v;
+    },
+};
+
+/** Instances and other non-buffer-serializable values: shipped via the refs side-channel */
+export const ref: Codec.Internal<defined> = {
+    write(w, v) {
+        w.refs.push(v);
+    },
+    read(r) {
+        const v = r.refs[r.refCursor];
+        r.refCursor += 1;
+        return v;
+    },
+    _size: 0,
+};
+
+export const vector3: Codec.Internal<Vector3> = {
+    write(w, v) {
+        f32.write(w, v.X);
+        f32.write(w, v.Y);
+        f32.write(w, v.Z);
+    },
+    read(r) {
+        return new Vector3(f32.read(r), f32.read(r), f32.read(r));
+    },
+    _size: 12,
+};
+
+// ---------------------------------------------------------------- combinators
+
+export function optional<T extends defined>(
+    inner: Codec.Internal<T>,
+): Codec.Internal<T | undefined> {
+    return {
+        write(w, v) {
+            if (v === undefined) {
+                bool.write(w, false);
+            } else {
+                bool.write(w, true);
+                inner.write(w, v);
+            }
+        },
+        read(r) {
+            return bool.read(r) ? inner.read(r) : undefined;
+        },
+    };
+}
+
+/** u16 count-prefixed array */
+export function array<T extends defined>(inner: Codec.Internal<T>): Codec.Internal<T[]> {
+    return {
+        write(w, v) {
+            u16.write(w, v.size());
+            for (const item of v) inner.write(w, item);
+        },
+        read(r) {
+            const count = u16.read(r);
+            const out = new Array<T>();
+            for (let i = 0; i < count; i++) out.push(inner.read(r));
+            return out;
+        },
+    };
+}
+
+/**
+ * Field order is sorted alphabetically at construction time.
+ * This is NOT optional — Luau's pairs() iteration order is nondeterministic,
+ * so without sorting, server and client would serialize fields differently.
+ */
+export function struct<T extends object>(
+    fields: { [K in keyof T]: Codec.Internal<T[K]> },
+): Codec.Internal<T> {
+    const keys = new Array<keyof T>();
+    for (const [k] of pairs(fields)) keys.push(k as keyof T);
+    (keys as unknown as string[]).sort();
+
+    return {
+        write(w, v) {
+            for (const k of keys) fields[k].write(w, v[k]);
+        },
+        read(r) {
+            const out = {} as T;
+            for (const k of keys) out[k] = fields[k].read(r);
+            return out;
+        },
+    };
+}
+```
+
+## package/src/index.ts (15 lines)
+```ts
+// Binary
+import { createPool, packet, query, replication } from "@binary/pool";
+
+// Exports
+export * as c from "./codec";
+
+const TypeNet = {
+    createPool,
+    packet,
+    query,
+    replication,
+};
+
+export default TypeNet;
+export type { API, Binary, Def, Pool } from "./types";
+```
+
+## package/src/types.ts (100 lines)
+```ts
+export namespace Binary {
+    export interface Writer {
+        buf: buffer;
+        cursor: number;
+        /** non-serializable values (Instances etc.) shipped alongside the buffer */
+        refs: defined[];
+    }
+
+    export interface Reader {
+        buf: buffer;
+        cursor: number;
+        refs: defined[];
+        refCursor: number;
+    }
+
+    export type Write<T> = (w: Writer, value: T) => void;
+    export type Read<T> = (r: Reader) => T;
+}
+
+export namespace Codec {
+    // Method syntax (not arrow-property) is intentional: it makes Internal<T>
+    // bivariant, so Internal<Foo> is assignable to Internal<unknown> and the
+    // runtime can hold heterogeneous codecs without `any`.
+    export interface Internal<T> {
+        write(w: Binary.Writer, value: T): void;
+        read(r: Binary.Reader): T;
+        /** fixed byte size if statically known — enables exact preallocation later */
+        _size?: number;
+    }
+
+    /** phantom-typed handle if you want to hide write/read from consumers */
+    export type External<T> = Internal<T> & { readonly _phantom?: T };
+
+    export type Infer<C> = C extends Internal<infer T> ? T : never;
+}
+
+export namespace Def {
+    export interface Packet<T> {
+        readonly _kind: "Packet";
+        readonly codec: Codec.Internal<T>;
+        readonly unreliable: boolean;
+    }
+
+    export interface Query<Req, Res> {
+        readonly _kind: "Query";
+        readonly req: Codec.Internal<Req>;
+        readonly res: Codec.Internal<Res>;
+        readonly timeout: number;
+    }
+
+    export interface Replication<T> {
+        readonly _kind: "Replication";
+        readonly codec: Codec.Internal<T>;
+    }
+
+    export type Any = Packet<unknown> | Query<unknown, unknown> | Replication<unknown>;
+}
+
+export namespace API {
+    export type Target = Player | Player[] | { readonly exclude: Player | Player[] };
+
+    export interface Packet<T> {
+        /** server: omit target to broadcast. client: target is ignored. */
+        send(data: T, target?: Target): void;
+        broadcast(data: T): void;
+        /** returns a disconnect function */
+        on(handler: (data: T, player?: Player) => void): () => void;
+    }
+
+    export interface Query<Req, Res> {
+        /** client → server, rejects on timeout or server error */
+        invoke(req: Req): Promise<Res>;
+        /** server-side responder */
+        handle(handler: (player: Player, req: Req) => Res): void;
+    }
+
+    export interface Replication<T> {
+        /** server-only: sets authoritative value, replicates to everyone */
+        set(value: T): void;
+        /** server: authoritative value. client: latest received (undefined before first sync) */
+        get(): T | undefined;
+        /** client-side change listener, returns a disconnect function */
+        changed(handler: (value: T) => void): () => void;
+    }
+}
+
+export namespace Pool {
+    export type Defs = Record<string, Def.Any>;
+
+    export type InferAPI<D> =
+        D extends Def.Packet<infer T>
+        ? API.Packet<T>
+        : D extends Def.Query<infer Req, infer Res>
+        ? API.Query<Req, Res>
+        : D extends Def.Replication<infer T>
+        ? API.Replication<T>
+        : never;
+
+    export type Of<D extends Defs> = { readonly [K in keyof D]: InferAPI<D[K]> };
+}
+```
+

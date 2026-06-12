@@ -1,0 +1,71 @@
+{
+  "name": "Typenet",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "postCreateCommand": "rokit install --no-trust-check && bun install --force",
+  "shutdownAction": "stopContainer",
+  "updateRemoteUserUID": false,
+  "overrideCommand": true,
+  "remoteUser": "root",
+  "init": true,
+  "runArgs": ["-p", "34872:34872"],
+  "containerEnv": {
+    "NODE_ENV": "development"
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}/.ssh",
+      "target": "/home/root/.ssh",
+      "type": "bind"
+    }
+  ],
+  "forwardPorts": ["34872"],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "js/ts.tsdk.path": "node_modules/typescript/lib",
+        "luau-lsp.sourcemap.autogenerate": false,
+        "luau-lsp.diagnostics.workspace": false,
+        "luau-lsp.sourcemap.enabled": false,
+        "editor.defaultFormatter": "biomejs.biome",
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+        "js/ts.format.semicolons": "insert",
+        "eslint.run": "onType",
+        "luau-lsp.ignoreGlobs": [
+          "**/include/**",
+          "**/out/**",
+          "**/node_modules/**",
+          "**/dist/**",
+          "**/scripts/**",
+          "**/network/**"
+        ],
+        "terminal.integrated.fontFamily": "'Monaspace Radon Frozen', 'FiraCode Nerd Font'",
+        "js/ts.preferences.importModuleSpecifier": "shortest",
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "jest.jestCommandLine": "bun run test:local --",
+        "todo-tree.tree.scanMode": "workspace",
+        "jest.runMode": "on-demand"
+      },
+      "extensions": [
+        "DavidAnson.vscode-markdownlint",
+        "github.vscode-github-actions",
+        "roblox-ts.vscode-roblox-ts",
+        "foxundermoon.shell-format",
+        "unthrottled.doki-theme",
+        "Gruntfuggly.todo-tree",
+        "icrawl.discord-vscode",
+        "ms-vscode.live-server",
+        "GitHub.copilot-chat",
+        "filiptibell.deputy",
+        "Orta.vscode-jest",
+        "eamodio.gitlens",
+        "oven.bun-vscode",
+        "GitHub.copilot",
+        "biomejs.biome"
+      ]
+    }
+  }
+}

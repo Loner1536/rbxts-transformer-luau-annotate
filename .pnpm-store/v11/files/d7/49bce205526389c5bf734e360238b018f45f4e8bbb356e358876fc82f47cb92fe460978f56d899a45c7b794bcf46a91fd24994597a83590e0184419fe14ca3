@@ -1,0 +1,9 @@
+[package]
+name = "littensy/charm"
+version = "0.10.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+exclude = ["package.json", "node_modules"]
+include = ["LICENSE.md"]
+
+[dependencies]

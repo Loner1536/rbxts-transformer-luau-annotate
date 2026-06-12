@@ -1,0 +1,10 @@
+packages:
+  - "package"
+  - "playground"
+allowBuilds:
+  esbuild: true
+  postinstall-postinstall: true
+minimumReleaseAgeExclude:
+  - pnpm@11.4.0
+shamefully-hoist: true
+shamefullyHoist: true

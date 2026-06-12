@@ -1,0 +1,14 @@
+{
+	"version": 1,
+	"flameworkVersion": "1.3.2",
+	"identifiers": {
+		"@flamework/core:out/flamework@ArtificialDependency": "$:flamework@ArtificialDependency",
+		"@flamework/core:out/flamework@OnTick": "$:flamework@OnTick",
+		"@flamework/core:out/flamework@OnPhysics": "$:flamework@OnPhysics",
+		"@flamework/core:out/flamework@OnRender": "$:flamework@OnRender",
+		"@flamework/core:out/flamework@OnInit": "$:flamework@OnInit",
+		"@flamework/core:out/flamework@OnStart": "$:flamework@OnStart"
+	},
+	"metadata": {},
+	"identifierPrefix": "$"
+}

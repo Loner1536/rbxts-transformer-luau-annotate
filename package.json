@@ -1,0 +1,20 @@
+{
+    "name": "typenet-workspace",
+    "private": true,
+    "scripts": {
+        "build": "cd ./playground && bun run build",
+        "compile": "cd ./package && bun run build && cd ../playground && bun run compile",
+        "dev": "cd ./package && bun run watch & cd ./playground && bun run dev",
+        "publish": "cd ./package && bun run build && npm publish"
+    },
+    "packageManager": "pnpm@11.4.0",
+    "dependencies": {
+        "pnpm": "^11.4.0"
+    },
+    "resolutions": {
+        "@rbxts/pebble": "npm:@rbxts/loner1536-pebble@0.1.4"
+    },
+    "devDependencies": {
+        "rbxts-transformer-luau-annotate": "^0.0.1"
+    }
+}

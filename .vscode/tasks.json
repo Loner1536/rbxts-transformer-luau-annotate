@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Compile",
+			"command": "bun x turbo run compile",
+			"group": "build",
+			"type": "shell"
+		},
+		{
+			"label": "Watch",
+			"command": "bun run watch",
+			"group": "build",
+			"type": "shell"
+		},
+		{
+			"label": "Login",
+			"command": "bun run login",
+			"group": "build",
+			"type": "shell"
+		}
+	]
+}

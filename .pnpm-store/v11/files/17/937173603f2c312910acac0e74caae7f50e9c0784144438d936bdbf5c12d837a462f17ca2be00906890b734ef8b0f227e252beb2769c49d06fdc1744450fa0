@@ -1,0 +1,16 @@
+{
+  "name": "@rbxts/react-charm",
+  "version": "0.3.0",
+  "description": "React bindings for Charm",
+  "repository": "littensy/charm",
+  "license": "MIT",
+  "main": "init.luau",
+  "types": "index.d.ts",
+  "peerDependencies": {
+    "@rbxts/react": "*",
+    "@rbxts/charm": "0.10.0"
+  },
+  "scripts": {
+    "publish:wally": "wally publish"
+  }
+}

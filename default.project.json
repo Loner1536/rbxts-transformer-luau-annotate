@@ -1,0 +1,6 @@
+{
+	"name": "typenet",
+	"tree": {
+		"$path": "out/"
+	}
+}

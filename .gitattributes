@@ -1,0 +1,8 @@
+
+# --- Everything else ---
+# Mark all top-level folders as NOT detectable by default
+* linguist-detectable=false
+
+# --- Source code ---
+# Only files under src/ are considered real language-detectable code
+src/** linguist-detectable=true
